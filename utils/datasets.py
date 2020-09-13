@@ -14,10 +14,19 @@ from PIL import Image, ExifTags
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from utils.utils import xyxy2xywh, xywh2xyxy
+try:
+    import google.colab
+    IN_COLAB = True
+except:
+    IN_COLAB = False
+
+if IN_COLAB:
+    from xray_yolov3.utils.utils import xyxy2xywh, xywh2xyxy
+else:
+    from utils.utils import xyxy2xywh, xywh2xyxy
 
 help_url = 'https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data'
-img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif', '.tiff', '.dng']
+img_formats = ['.bmp', '.jpg', '.jpeg', '.png', '.tif', '.tiff', '.dng', 'png']
 vid_formats = ['.mov', '.avi', '.mp4', '.mpg', '.mpeg', '.m4v', '.wmv', '.mkv']
 
 # Get orientation exif tag
@@ -25,6 +34,9 @@ for orientation in ExifTags.TAGS.keys():
     if ExifTags.TAGS[orientation] == 'Orientation':
         break
 
+def hangulFilePathImageRead(filePath) :
+    numpyArray = np.fromfile(filePath, np.uint8)
+    return cv2.imdecode(numpyArray, cv2.IMREAD_UNCHANGED)
 
 def exif_size(img):
     # Returns exif-corrected PIL size
@@ -95,7 +107,7 @@ class LoadImages:  # for inference
         else:
             # Read image
             self.count += 1
-            img0 = cv2.imread(path)  # BGR
+            img0 = hangulFilePathImageRead(path)  # BGR
             assert img0 is not None, 'Image Not Found ' + path
             print('image %g/%g %s: ' % (self.count, self.nF, path), end='')
 
@@ -263,7 +275,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             path = str(Path(path))  # os-agnostic
             parent = str(Path(path).parent) + os.sep
             if os.path.isfile(path):  # file
-                with open(path, 'r') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     f = f.read().splitlines()
                     f = [x.replace('./', parent) if x.startswith('./') else x for x in f]  # local to global path
             elif os.path.isdir(path):  # folder
@@ -381,7 +393,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 # Extract object detection boxes for a second stage classifier
                 if extract_bounding_boxes:
                     p = Path(self.img_files[i])
-                    img = cv2.imread(str(p))
+                    img = hangulFilePathImageRead(str(p))
                     h, w = img.shape[:2]
                     for j, x in enumerate(l):
                         f = '%s%sclassifier%s%g_%g_%s' % (p.parent.parent, os.sep, os.sep, x[0], j, p.name)
@@ -523,13 +535,12 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             l[:, 0] = i  # add target image index for build_targets()
         return torch.stack(img, 0), torch.cat(label, 0), path, shapes
 
-
 def load_image(self, index):
     # loads 1 image from dataset, returns img, original hw, resized hw
     img = self.imgs[index]
     if img is None:  # not cached
         path = self.img_files[index]
-        img = cv2.imread(path)  # BGR
+        img = hangulFilePathImageRead(path)  # BGR
         assert img is not None, 'Image Not Found ' + path
         h0, w0 = img.shape[:2]  # orig hw
         r = self.img_size / max(h0, w0)  # resize image to img_size
@@ -774,7 +785,7 @@ def reduce_img_size(path='../data/sm4/images', img_size=1024):  # from utils.dat
     create_folder(path_new)
     for f in tqdm(glob.glob('%s/*.*' % path)):
         try:
-            img = cv2.imread(f)
+            img = hangulFilePathImageRead(f)
             h, w = img.shape[:2]
             r = img_size / max(h, w)  # size ratio
             if r < 1.0:
@@ -793,7 +804,7 @@ def convert_images2bmp():  # from utils.datasets import *; convert_images2bmp()
         create_folder(path + 'bmp')
         for ext in formats:  # ['.bmp', '.jpg', '.jpeg', '.png', '.tif', '.dng']
             for f in tqdm(glob.glob('%s/*%s' % (path, ext)), desc='Converting %s' % ext):
-                cv2.imwrite(f.replace(ext.lower(), '.bmp').replace(path, path + 'bmp'), cv2.imread(f))
+                cv2.imwrite(f.replace(ext.lower(), '.bmp').replace(path, path + 'bmp'), hangulFilePathImageRead(f))
 
     # Save labels
     # for path in ['../coco/trainvalno5k.txt', '../coco/5k.txt']:
@@ -824,7 +835,7 @@ def recursive_dataset2bmp(dataset='../data/sm4_bmp'):  # from utils.datasets imp
                 with open(p, 'w') as f:
                     f.write(lines)
             elif s in formats:  # replace image
-                cv2.imwrite(p.replace(s, '.bmp'), cv2.imread(p))
+                cv2.imwrite(p.replace(s, '.bmp'), hangulFilePathImageRead(p))
                 if s != '.bmp':
                     os.system("rm '%s'" % p)
 
